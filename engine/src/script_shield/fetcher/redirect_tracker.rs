@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// A single redirect hop in a chain.
 #[derive(Debug, Clone, Serialize, Deserialize)]

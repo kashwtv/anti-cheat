@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AntiCheat</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>AntiCheat</h1>
+      <span class="tagline">Antivirus for Gamers</span>
+    </header>
+
+    <nav>
+      <button data-view="dashboard" class="active">Dashboard</button>
+      <button data-view="scan">Scan</button>
+      <button data-view="script">Script Shield</button>
+      <button data-view="quarantine">Quarantine</button>
+    </nav>
+
+    <main>
+      <section id="view-dashboard" class="view active">
+        <h2>Dashboard</h2>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat"><span class="label">Signatures</span><span class="value" id="stat-sigs">—</span></div>
+          <div class="stat"><span class="label">Whitelist</span><span class="value" id="stat-wl">—</span></div>
+          <div class="stat"><span class="label">Games known</span><span class="value" id="stat-games">—</span></div>
+          <div class="stat"><span class="label">Quarantined</span><span class="value" id="stat-qf">—</span></div>
+        </div>
+        <button id="refresh-stats">Refresh</button>
+      </section>
+
+      <section id="view-scan" class="view">
+        <h2>Scan a file</h2>
+        <div class="row">
+          <input type="text" id="scan-path" placeholder="/path/to/file" />
+          <button id="btn-scan">Deep scan</button>
+          <button id="btn-qscan">Quick scan</button>
+        </div>
+        <pre id="scan-result" class="output">Results appear here.</pre>
+      </section>
+
+      <section id="view-script" class="view">
+        <h2>Script Shield</h2>
+        <p>Analyze a Lua cheat script for malicious behavior.</p>
+        <div class="row">
+          <input type="text" id="script-path" placeholder="/path/to/script.lua" />
+          <button id="btn-script">Analyze</button>
+        </div>
+        <pre id="script-result" class="output">Results appear here.</pre>
+      </section>
+
+      <section id="view-quarantine" class="view">
+        <h2>Quarantine</h2>
+        <p>Quarantine management is not yet wired through the GUI. Use <code>anticheat quarantine list</code> for now.</p>
+      </section>
+    </main>
+
+    <footer>
+      <span>AntiCheat v0.1.0</span>
+    </footer>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

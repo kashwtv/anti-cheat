@@ -1,6 +1,5 @@
 //! Lua script parser that extracts API calls and structure without building a full AST.
 
-use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 

@@ -14,7 +14,6 @@ pub use script_analyzer::{
     ScriptLanguage,
 };
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// High-level payload analyzer that orchestrates script analysis and behavior detection.

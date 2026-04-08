@@ -1,6 +1,5 @@
 //! Script payload analysis for detecting malicious patterns in downloaded scripts.
 
-use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 

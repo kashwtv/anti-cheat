@@ -11,6 +11,8 @@ use tracing::{debug, error, info, warn};
 
 use anticheat_engine::AntiCheatEngine;
 
+use crate::notifications::Notifier;
+
 /// Shared, lock-protected reference to the engine. The rusqlite connections
 /// inside `AntiCheatEngine` are not `Sync`, so we serialize all access through
 /// a `Mutex` instead.
@@ -163,6 +165,7 @@ impl FileWatcher {
 
                             let engine = Arc::clone(&engine);
                             let scan_path = path.clone();
+                            let notifier = Notifier::new();
                             tokio::task::spawn_blocking(move || {
                                 info!(path = %scan_path.display(), "auto-scanning file");
                                 let guard = engine.lock().unwrap();
@@ -175,6 +178,10 @@ impl FileWatcher {
                                                 threat = %result.threat_info.threat_name,
                                                 level = ?level,
                                                 "threat detected in auto-scan"
+                                            );
+                                            notifier.notify_threat(
+                                                &result.file_path,
+                                                &result.threat_info.threat_name,
                                             );
                                         } else {
                                             debug!(

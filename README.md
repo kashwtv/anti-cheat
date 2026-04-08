@@ -70,18 +70,36 @@ anti-cheat/
 - Game-mode detection that pauses scans while a known game is running
 - Unix-socket IPC server for control by CLI / GUI
 
-### Phase 4 - Desktop GUI (planned)
-Tauri + React desktop application.
+### Phase 4 - Desktop GUI (complete)
+- Tauri v2 desktop application in `ui/`
+- Vanilla HTML/CSS/JS frontend (no framework bloat)
+- Tauri commands wrapping the engine: `scan_file`, `quick_scan`,
+  `scan_directory`, `get_stats`, `trust_file`, `analyze_script`
+- Views: Dashboard, Scan, Script Shield, Quarantine
+
+### Phase 5 - Polish (ongoing)
+- Threat notifications wired from the file watcher
+- Cleaned up unused imports and warnings
+- Frontend-backend separation so the engine can be reused from CLI, service,
+  and desktop GUI without duplication
 
 ## Building
 
 ```bash
+# CLI + service (workspace)
 cargo build --release
 ```
 
 Outputs:
 - `target/release/anticheat` (CLI)
 - `target/release/anticheat-service` (background service)
+
+The desktop GUI lives outside the workspace:
+
+```bash
+cd ui/src-tauri
+cargo build --release
+```
 
 ## CLI Usage
 
@@ -127,6 +145,17 @@ RUST_LOG=info anticheat-service
 
 The service exposes a JSON-line IPC socket at
 `$XDG_RUNTIME_DIR/anticheat-service.sock` (Linux/macOS) for client tools.
+
+## Desktop GUI
+
+Launch the Tauri desktop app after building:
+
+```bash
+cd ui/src-tauri && cargo run
+```
+
+The GUI provides a dashboard with signature/whitelist/quarantine stats, a
+scan view, and the Script Shield analyzer.
 
 ## Why a separate antivirus for gamers?
 
