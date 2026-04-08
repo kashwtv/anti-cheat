@@ -1,0 +1,21 @@
+[package]
+name = "anticheat-service"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "anticheat-service"
+path = "src/main.rs"
+
+[dependencies]
+anticheat-engine = { path = "../engine" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+notify = "6.0"
+walkdir = "2.0"

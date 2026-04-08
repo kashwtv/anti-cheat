@@ -2,6 +2,7 @@ pub mod database;
 pub mod detection;
 pub mod quarantine;
 pub mod scanner;
+pub mod script_shield;
 pub mod updater;
 
 use std::path::{Path, PathBuf};

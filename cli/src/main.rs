@@ -95,6 +95,28 @@ enum Commands {
     Stats,
     /// Show recent activity log
     Log,
+    /// Script Shield: analyze Lua scripts and download chains
+    Script {
+        #[command(subcommand)]
+        action: ScriptAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ScriptAction {
+    /// Analyze a Lua script file for dangerous behavior
+    Analyze {
+        /// Path to the script file
+        path: PathBuf,
+        /// Also fetch any URLs the script references
+        #[arg(long)]
+        follow: bool,
+    },
+    /// Fetch a URL safely (without executing) and report what's there
+    Fetch {
+        /// URL to fetch
+        url: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -541,7 +563,85 @@ h1{{color:#00ff88}}.threat{{color:#ff4444}}.clean{{color:#00ff88}}</style></head
             println!("  Activity log will be available in a future version.");
             println!("  Use 'anticheat quarantine list' to view quarantine history.");
         }
+
+        Commands::Script { action } => {
+            use anticheat_engine::script_shield::{ScriptShield, ScriptShieldConfig};
+
+            let shield = ScriptShield::new(ScriptShieldConfig::default())?;
+
+            match action {
+                ScriptAction::Analyze { path, follow } => {
+                    println!(
+                        "{} {}",
+                        "═══ Script Shield: Analyzing".bright_cyan(),
+                        path.display()
+                    );
+                    let report = shield.analyze_file(path, *follow).await?;
+                    let summary = report.summary();
+                    println!("  Language:    {}", summary.language);
+                    println!(
+                        "  Risk:        {} ({}/100)",
+                        summary.label.bold(),
+                        summary.risk_score
+                    );
+                    println!("  URLs:        {}", summary.url_count);
+                    println!("  API calls:   {}", summary.api_call_count);
+                    println!("  Obfuscated:  {}", summary.obfuscation_detected);
+                    if !summary.risk_indicators.is_empty() {
+                        println!("  Indicators:");
+                        for ind in &summary.risk_indicators {
+                            println!("    - {}", ind);
+                        }
+                    }
+                    if !report.url_verdicts.is_empty() {
+                        println!("  URL verdicts:");
+                        for v in &report.url_verdicts {
+                            println!(
+                                "    [{}] {} ({}/100) - {}",
+                                v.label, v.host, v.risk_score, v.url
+                            );
+                        }
+                    }
+                    if let Some(chain) = &report.fetch_chain {
+                        println!(
+                            "  Fetch chain: {} resources, {} blocked, {} executable",
+                            chain.total_urls_found,
+                            chain.blocked_count,
+                            chain.malicious_count
+                        );
+                    }
+                }
+                ScriptAction::Fetch { url } => {
+                    println!("{} {}", "═══ Script Shield: Fetching".bright_cyan(), url);
+                    let chain = shield.fetch_urls(vec![url.clone()]).await?;
+                    println!(
+                        "  Resources found: {}\n  Blocked:         {}\n  Executables:     {}",
+                        chain.total_urls_found, chain.blocked_count, chain.malicious_count
+                    );
+                    for entry in &chain.entries {
+                        print_chain_entry(entry, 0);
+                    }
+                }
+            }
+        }
     }
 
     Ok(())
+}
+
+fn print_chain_entry(entry: &anticheat_engine::script_shield::ChainEntry, indent: usize) {
+    let pad = "  ".repeat(indent);
+    println!("{}- {} (depth {})", pad, entry.url, entry.depth);
+    if let Some(ref err) = entry.error {
+        println!("{}  error: {}", pad, err);
+    }
+    if let Some(ref resp) = entry.response {
+        println!(
+            "{}  status: {}, {} bytes, executable={}",
+            pad, resp.status_code, resp.size_bytes, resp.is_executable
+        );
+    }
+    for child in &entry.children {
+        print_chain_entry(child, indent + 1);
+    }
 }

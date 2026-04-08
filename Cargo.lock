@@ -173,6 +173,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "anticheat-service"
+version = "0.1.0"
+dependencies = [
+ "anticheat-engine",
+ "anyhow",
+ "chrono",
+ "notify",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
