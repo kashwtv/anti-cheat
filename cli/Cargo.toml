@@ -1,0 +1,26 @@
+[package]
+name = "anticheat-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CLI interface for AntiCheat antivirus"
+
+[[bin]]
+name = "anticheat"
+path = "src/main.rs"
+
+[dependencies]
+anticheat-engine = { path = "../engine" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+walkdir = "2.0"
+clap = { version = "4.0", features = ["derive"] }
+comfy-table = "7.0"
+indicatif = "0.17"
+colored = "2.0"
