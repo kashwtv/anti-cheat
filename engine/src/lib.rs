@@ -1,8 +1,11 @@
+pub mod anticheat_compat;
+pub mod clean;
 pub mod database;
 pub mod detection;
 pub mod quarantine;
 pub mod scanner;
 pub mod script_shield;
+pub mod tune;
 pub mod updater;
 
 use std::path::{Path, PathBuf};
@@ -13,6 +16,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::anticheat_compat::{AntiCheatCompat, CompatStatus};
+use crate::clean::{CleanConfig, CleanReport, DeepCleaner, SweepResult};
 use crate::database::DatabaseManager;
 use crate::detection::{Classification, DetectionEngine, ThreatInfo};
 use crate::quarantine::{QuarantineEntry, QuarantineManager};
@@ -21,11 +26,15 @@ use crate::scanner::heuristics::HeuristicResult;
 use crate::scanner::network_scan::NetworkIndicators;
 use crate::scanner::pe_analyzer::PeAnalysis;
 use crate::scanner::Scanner;
+use crate::tune::{SystemSnapshot, TuneReport, Tuner};
 use crate::updater::{UpdateInfo, UpdateManager, UpdateResult};
 
 // Re-export key types
 pub use crate::detection::{ThreatLevel, RecommendedAction};
 pub use crate::detection::confidence::ScanEvidence;
+pub use crate::tune::{Impact as TuneImpact, TuneCategory, TuneSuggestion};
+pub use crate::clean::{CleanCategory, CleanTarget, format_bytes};
+pub use crate::anticheat_compat::{AntiCheatProduct, CompatAction};
 
 /// Scan sensitivity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,6 +118,7 @@ pub struct AntiCheatEngine {
     pub database: DatabaseManager,
     pub quarantine: QuarantineManager,
     updater: UpdateManager,
+    compat: AntiCheatCompat,
     config: EngineConfig,
 }
 
@@ -151,8 +161,46 @@ impl AntiCheatEngine {
             database,
             quarantine,
             updater,
+            compat: AntiCheatCompat::new(),
             config,
         })
+    }
+
+    /// Build a compatibility status snapshot from a process-name iterator.
+    /// The caller is expected to pass the current running-process list
+    /// (the service already has one).
+    pub fn compat_status<I, S>(&self, processes: I) -> CompatStatus
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.compat.build_status(processes)
+    }
+
+    /// Direct access to the compat layer for fine-grained policy checks.
+    pub fn compat(&self) -> &AntiCheatCompat {
+        &self.compat
+    }
+
+    /// Generate a tune plan based on the current system state.
+    pub fn tune_plan(&self) -> TuneReport {
+        Tuner::new().plan(&SystemSnapshot::capture())
+    }
+
+    /// Apply the safe subset of tune tweaks.
+    pub fn tune_apply(&self) -> TuneReport {
+        Tuner::new().apply(&SystemSnapshot::capture())
+    }
+
+    /// Scan for reclaimable garbage without deleting anything.
+    pub fn clean_scan(&self) -> CleanReport {
+        DeepCleaner::new(CleanConfig::default()).scan()
+    }
+
+    /// Sweep based on a previous scan report. Only selected targets are
+    /// deleted. The caller is responsible for confirming with the user.
+    pub fn clean_sweep(&self, report: &CleanReport) -> SweepResult {
+        DeepCleaner::new(CleanConfig::default()).sweep(report)
     }
 
     /// Full scan of a single file.

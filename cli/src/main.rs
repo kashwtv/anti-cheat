@@ -5,7 +5,10 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
 
-use anticheat_engine::{AntiCheatEngine, EngineConfig, ScanResult, ThreatLevel};
+use anticheat_engine::{
+    format_bytes, AntiCheatEngine, CleanCategory, EngineConfig, ScanResult, ThreatLevel,
+    TuneCategory,
+};
 
 #[derive(Parser)]
 #[command(
@@ -100,6 +103,29 @@ enum Commands {
         #[command(subcommand)]
         action: ScriptAction,
     },
+    /// Tune the PC for maximum gaming performance
+    Tune {
+        /// Only show suggestions, don't apply any changes (default)
+        #[arg(long)]
+        plan: bool,
+        /// Apply the safe subset of tweaks
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Deep-clean reclaimable garbage (CCleaner-style)
+    Clean {
+        /// Only scan, don't delete
+        #[arg(long)]
+        scan: bool,
+        /// Actually delete the scanned garbage
+        #[arg(long)]
+        sweep: bool,
+        /// Allow sweeping outside the user's HOME directory
+        #[arg(long)]
+        system_wide: bool,
+    },
+    /// Show anti-cheat compatibility status (what game ACs are active)
+    Compat,
 }
 
 #[derive(Subcommand)]
@@ -564,6 +590,151 @@ h1{{color:#00ff88}}.threat{{color:#ff4444}}.clean{{color:#00ff88}}</style></head
             println!("  Use 'anticheat quarantine list' to view quarantine history.");
         }
 
+        Commands::Tune { plan, apply } => {
+            print_banner();
+            let engine = init_engine(&cli)?;
+            let report = if *apply && !*plan {
+                println!("{}", "Applying safe tune tweaks...".cyan());
+                engine.tune_apply()
+            } else {
+                println!("{}", "Generating tune plan...".cyan());
+                engine.tune_plan()
+            };
+
+            println!("{}", "═══ Tune Report ═══".bright_green());
+            println!(
+                "  Estimated score: {} → {}",
+                report.score_before.to_string().yellow(),
+                report.score_after.to_string().bright_green()
+            );
+            println!("  Suggestions:     {}", report.suggestions.len());
+            println!(
+                "  Applied:         {}",
+                report.applied_count().to_string().bright_green()
+            );
+            println!();
+
+            for s in &report.suggestions {
+                let marker = if s.applied { "✓".green() } else { "•".cyan() };
+                let impact_tag = match s.impact {
+                    anticheat_engine::TuneImpact::Low => "low".dimmed(),
+                    anticheat_engine::TuneImpact::Medium => "med".yellow(),
+                    anticheat_engine::TuneImpact::High => "high".bright_green(),
+                };
+                println!(
+                    "  {marker} [{}] {} — {}",
+                    impact_tag,
+                    category_label(s.category),
+                    s.title.bold()
+                );
+                println!("      {}", s.description.dimmed());
+                println!("      revert: {}", s.revert_hint.dimmed());
+            }
+
+            if !report.notes.is_empty() {
+                println!();
+                println!("{}", "Notes:".bold());
+                for note in &report.notes {
+                    println!("  - {note}");
+                }
+            }
+        }
+
+        Commands::Clean {
+            scan,
+            sweep,
+            system_wide,
+        } => {
+            print_banner();
+            let engine = init_engine(&cli)?;
+            println!("{}", "Scanning reclaimable garbage...".cyan());
+            let report = engine.clean_scan();
+
+            println!("{}", "═══ Deep Clean Report ═══".bright_green());
+            println!(
+                "  Total: {}  across {} files ({} targets) in {:.2}s",
+                format_bytes(report.total_bytes).bright_green(),
+                report.total_files,
+                report.targets.len(),
+                report.scan_duration_ms as f64 / 1000.0
+            );
+            println!();
+
+            for t in &report.targets {
+                let mark = if t.selected { "✓".green() } else { "·".dimmed() };
+                println!(
+                    "  {mark} [{}] {}  {}",
+                    clean_label(t.category).cyan(),
+                    format_bytes(t.size_bytes).bright_green(),
+                    t.path.display(),
+                );
+                println!("      {}", t.description.dimmed());
+            }
+
+            if *sweep && !*scan {
+                println!();
+                println!("{}", "Sweeping selected targets...".cyan());
+                // Honour system_wide by rebuilding the cleaner with an
+                // override config.
+                let mut cfg = anticheat_engine::clean::CleanConfig::default();
+                cfg.allow_system_wide = *system_wide;
+                let cleaner = anticheat_engine::clean::DeepCleaner::new(cfg);
+                let result = cleaner.sweep(&report);
+                println!(
+                    "{} Freed {} across {} files",
+                    "✓".green(),
+                    format_bytes(result.bytes_freed).bright_green(),
+                    result.files_deleted
+                );
+                if !result.errors.is_empty() {
+                    println!("{}", "Warnings:".yellow());
+                    for err in &result.errors {
+                        println!("  {err}");
+                    }
+                }
+            } else {
+                println!();
+                println!(
+                    "{}",
+                    "Dry run only. Pass --sweep to actually delete.".dimmed()
+                );
+            }
+        }
+
+        Commands::Compat => {
+            print_banner();
+            let engine = init_engine(&cli)?;
+            let processes = current_process_names();
+            let status = engine.compat_status(&processes);
+
+            println!("{}", "═══ Anti-Cheat Compatibility ═══".bright_cyan());
+            if status.active_products.is_empty() {
+                println!("  {} No game anti-cheat detected.", "✓".green());
+            } else {
+                println!(
+                    "  {} Kernel mode: {}",
+                    if status.kernel_mode_active {
+                        "⚠".yellow()
+                    } else {
+                        "·".dimmed()
+                    },
+                    status.kernel_mode_active
+                );
+                println!("  Active products:");
+                for p in &status.active_products {
+                    let label = if p.is_kernel_mode() {
+                        format!("{} (kernel)", p.display_name()).yellow()
+                    } else {
+                        p.display_name().normal()
+                    };
+                    println!("    - {label}");
+                }
+                println!("  Safe mode: {}", status.safe_mode);
+            }
+            println!();
+            println!("  {}", status.explanation);
+        }
+
         Commands::Script { action } => {
             use anticheat_engine::script_shield::{ScriptShield, ScriptShieldConfig};
 
@@ -627,6 +798,37 @@ h1{{color:#00ff88}}.threat{{color:#ff4444}}.clean{{color:#00ff88}}</style></head
     }
 
     Ok(())
+}
+
+fn category_label(cat: TuneCategory) -> String {
+    cat.display_name().to_string()
+}
+
+fn clean_label(cat: CleanCategory) -> String {
+    cat.display_name().to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn current_process_names() -> Vec<String> {
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name();
+            let fname = fname.to_string_lossy();
+            if !fname.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            if let Ok(comm) = std::fs::read_to_string(entry.path().join("comm")) {
+                out.push(comm.trim().to_string());
+            }
+        }
+    }
+    out
+}
+
+#[cfg(not(target_os = "linux"))]
+fn current_process_names() -> Vec<String> {
+    Vec::new()
 }
 
 fn print_chain_entry(entry: &anticheat_engine::script_shield::ChainEntry, indent: usize) {

@@ -7,59 +7,278 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header>
-      <h1>AntiCheat</h1>
-      <span class="tagline">Antivirus for Gamers</span>
-    </header>
-
-    <nav>
-      <button data-view="dashboard" class="active">Dashboard</button>
-      <button data-view="scan">Scan</button>
-      <button data-view="script">Script Shield</button>
-      <button data-view="quarantine">Quarantine</button>
-    </nav>
-
-    <main>
-      <section id="view-dashboard" class="view active">
-        <h2>Dashboard</h2>
-        <div class="stats-grid" id="stats-grid">
-          <div class="stat"><span class="label">Signatures</span><span class="value" id="stat-sigs">—</span></div>
-          <div class="stat"><span class="label">Whitelist</span><span class="value" id="stat-wl">—</span></div>
-          <div class="stat"><span class="label">Games known</span><span class="value" id="stat-games">—</span></div>
-          <div class="stat"><span class="label">Quarantined</span><span class="value" id="stat-qf">—</span></div>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2 L3 6 V12 C3 17 7 21 12 22 C17 21 21 17 21 12 V6 Z"
+                    fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M8 12 L11 15 L16 9" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="brand-name">AntiCheat</div>
+            <div class="brand-tag">AV for gamers</div>
+          </div>
         </div>
-        <button id="refresh-stats">Refresh</button>
-      </section>
 
-      <section id="view-scan" class="view">
-        <h2>Scan a file</h2>
-        <div class="row">
-          <input type="text" id="scan-path" placeholder="/path/to/file" />
-          <button id="btn-scan">Deep scan</button>
-          <button id="btn-qscan">Quick scan</button>
+        <nav class="nav">
+          <button data-view="dashboard" class="nav-btn active">
+            <span class="nav-icon">◉</span> Dashboard
+          </button>
+          <button data-view="scan" class="nav-btn">
+            <span class="nav-icon">⌕</span> Scan
+          </button>
+          <button data-view="tune" class="nav-btn">
+            <span class="nav-icon">⚡</span> Tune
+          </button>
+          <button data-view="clean" class="nav-btn">
+            <span class="nav-icon">✦</span> Deep Clean
+          </button>
+          <button data-view="script" class="nav-btn">
+            <span class="nav-icon">⌥</span> Script Shield
+          </button>
+          <button data-view="compat" class="nav-btn">
+            <span class="nav-icon">⎈</span> AC Compat
+          </button>
+          <button data-view="quarantine" class="nav-btn">
+            <span class="nav-icon">▢</span> Quarantine
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="status-pill" id="sidebar-status">
+            <span class="dot"></span>
+            <span class="text">Protected</span>
+          </div>
+          <div class="version">v0.1.0</div>
         </div>
-        <pre id="scan-result" class="output">Results appear here.</pre>
-      </section>
+      </aside>
 
-      <section id="view-script" class="view">
-        <h2>Script Shield</h2>
-        <p>Analyze a Lua cheat script for malicious behavior.</p>
-        <div class="row">
-          <input type="text" id="script-path" placeholder="/path/to/script.lua" />
-          <button id="btn-script">Analyze</button>
-        </div>
-        <pre id="script-result" class="output">Results appear here.</pre>
-      </section>
+      <main class="main">
+        <!-- DASHBOARD -->
+        <section id="view-dashboard" class="view active">
+          <header class="view-head">
+            <div>
+              <h1>Dashboard</h1>
+              <p class="subtitle">Your system at a glance.</p>
+            </div>
+            <button class="btn ghost" id="refresh-stats">Refresh</button>
+          </header>
 
-      <section id="view-quarantine" class="view">
-        <h2>Quarantine</h2>
-        <p>Quarantine management is not yet wired through the GUI. Use <code>anticheat quarantine list</code> for now.</p>
-      </section>
-    </main>
+          <div class="hero-card">
+            <div class="hero-score">
+              <div class="ring">
+                <svg viewBox="0 0 120 120">
+                  <circle cx="60" cy="60" r="54" class="ring-bg"/>
+                  <circle cx="60" cy="60" r="54" class="ring-fg" id="score-ring"/>
+                </svg>
+                <div class="ring-label">
+                  <div class="ring-value" id="score-value">—</div>
+                  <div class="ring-sub">Protection</div>
+                </div>
+              </div>
+            </div>
+            <div class="hero-meta">
+              <div class="hero-title" id="hero-title">Systems nominal</div>
+              <div class="hero-sub" id="hero-sub">No active threats detected.</div>
+              <div class="hero-actions">
+                <button class="btn primary" id="btn-quickscan-home">Quick scan home</button>
+                <button class="btn" id="btn-open-scan">Scan a file</button>
+              </div>
+            </div>
+          </div>
 
-    <footer>
-      <span>AntiCheat v0.1.0</span>
-    </footer>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Signatures</div>
+              <div class="stat-value" id="stat-sigs">—</div>
+              <div class="stat-spark">hash database</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Whitelist</div>
+              <div class="stat-value" id="stat-wl">—</div>
+              <div class="stat-spark">trusted files</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Games known</div>
+              <div class="stat-value" id="stat-games">—</div>
+              <div class="stat-spark">cheat-bundled titles</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Quarantine</div>
+              <div class="stat-value" id="stat-qf">—</div>
+              <div class="stat-spark">files isolated</div>
+            </div>
+          </div>
+
+          <div class="dash-row">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>Anti-cheat compatibility</h3>
+                <button class="btn ghost sm" id="refresh-compat">Check</button>
+              </div>
+              <div class="panel-body" id="compat-summary">
+                Checking for running game anti-cheats…
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <h3>Quick actions</h3>
+              </div>
+              <div class="panel-body quick-actions">
+                <button class="qa" data-go="tune">
+                  <div class="qa-icon">⚡</div>
+                  <div class="qa-title">Tune PC</div>
+                  <div class="qa-sub">Optimize for max FPS</div>
+                </button>
+                <button class="qa" data-go="clean">
+                  <div class="qa-icon">✦</div>
+                  <div class="qa-title">Deep clean</div>
+                  <div class="qa-sub">Reclaim disk space</div>
+                </button>
+                <button class="qa" data-go="script">
+                  <div class="qa-icon">⌥</div>
+                  <div class="qa-title">Script Shield</div>
+                  <div class="qa-sub">Analyze Lua cheats</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SCAN -->
+        <section id="view-scan" class="view">
+          <header class="view-head">
+            <div>
+              <h1>Scan</h1>
+              <p class="subtitle">Drop a file or paste a path.</p>
+            </div>
+          </header>
+
+          <div class="drop-card" id="drop-card">
+            <div class="drop-icon">⌕</div>
+            <div class="drop-title">Drop a file here</div>
+            <div class="drop-sub">or use the field below</div>
+          </div>
+
+          <div class="row">
+            <input type="text" id="scan-path" placeholder="/path/to/file.exe" />
+            <button class="btn primary" id="btn-scan">Deep scan</button>
+            <button class="btn" id="btn-qscan">Quick scan</button>
+          </div>
+
+          <div id="scan-verdict" class="verdict hidden"></div>
+          <pre id="scan-result" class="output">Results appear here.</pre>
+        </section>
+
+        <!-- TUNE -->
+        <section id="view-tune" class="view">
+          <header class="view-head">
+            <div>
+              <h1>Tune</h1>
+              <p class="subtitle">Tweak your PC for maximum gaming performance.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn" id="btn-tune-plan">Plan</button>
+              <button class="btn primary" id="btn-tune-apply">Apply safe</button>
+            </div>
+          </header>
+
+          <div class="score-bar">
+            <div class="score-bar-label">
+              <span>Estimated score</span>
+              <span><strong id="tune-before">—</strong> → <strong id="tune-after" class="green">—</strong></span>
+            </div>
+            <div class="score-bar-track">
+              <div class="score-bar-fill" id="tune-fill"></div>
+            </div>
+          </div>
+
+          <div id="tune-list" class="suggestion-list">
+            <div class="empty">Click <b>Plan</b> to generate tune suggestions.</div>
+          </div>
+        </section>
+
+        <!-- CLEAN -->
+        <section id="view-clean" class="view">
+          <header class="view-head">
+            <div>
+              <h1>Deep Clean</h1>
+              <p class="subtitle">Reclaim disk space. Safe defaults, nothing irreversible.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn" id="btn-clean-scan">Scan</button>
+              <button class="btn danger" id="btn-clean-sweep">Sweep selected</button>
+            </div>
+          </header>
+
+          <div class="clean-header" id="clean-summary">
+            <div class="clean-total">
+              <div class="clean-total-value" id="clean-bytes">—</div>
+              <div class="clean-total-sub">reclaimable</div>
+            </div>
+            <div class="clean-breakdown" id="clean-breakdown"></div>
+          </div>
+
+          <div id="clean-list" class="target-list">
+            <div class="empty">Click <b>Scan</b> to find reclaimable files.</div>
+          </div>
+        </section>
+
+        <!-- SCRIPT SHIELD -->
+        <section id="view-script" class="view">
+          <header class="view-head">
+            <div>
+              <h1>Script Shield</h1>
+              <p class="subtitle">Analyze Lua cheat scripts for malicious behavior.</p>
+            </div>
+          </header>
+          <div class="row">
+            <input type="text" id="script-path" placeholder="/path/to/script.lua" />
+            <button class="btn primary" id="btn-script">Analyze</button>
+          </div>
+          <div id="script-verdict" class="verdict hidden"></div>
+          <pre id="script-result" class="output">Results appear here.</pre>
+        </section>
+
+        <!-- ANTI-CHEAT COMPAT -->
+        <section id="view-compat" class="view">
+          <header class="view-head">
+            <div>
+              <h1>Anti-cheat compatibility</h1>
+              <p class="subtitle">Makes sure real game anti-cheats (EAC, Vanguard, BattlEye…) don't flag us.</p>
+            </div>
+            <button class="btn ghost" id="btn-compat-refresh">Refresh</button>
+          </header>
+          <div id="compat-full" class="panel">
+            <div class="panel-body">Checking…</div>
+          </div>
+        </section>
+
+        <!-- QUARANTINE -->
+        <section id="view-quarantine" class="view">
+          <header class="view-head">
+            <div>
+              <h1>Quarantine</h1>
+              <p class="subtitle">Isolated files. Use the CLI for now to restore or delete.</p>
+            </div>
+          </header>
+          <div class="panel">
+            <div class="panel-body">
+              Quarantine management is read-only in the GUI. Use
+              <code>anticheat quarantine list</code>,
+              <code>anticheat quarantine restore &lt;id&gt;</code>, or
+              <code>anticheat quarantine delete &lt;id&gt;</code>.
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast"></div>
 
     <script type="module" src="main.js"></script>
   </body>
