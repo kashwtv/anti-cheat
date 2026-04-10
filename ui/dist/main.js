@@ -1,282 +1,335 @@
-// AntiCheat desktop frontend — Tauri v2 core invoke API.
+// ═══════════════════════════════════════════════════════════════════════
+// AntiCheat — frontend logic.
+// Tauri v2 invoke API + animated particle background + counters.
+// ═══════════════════════════════════════════════════════════════════════
 
 const invoke = window.__TAURI__?.core?.invoke;
 
-// ------------------------- Toast helper -------------------------
-const toastEl = document.getElementById("toast");
+// ────────────── Particle background ──────────────
+(function initParticles() {
+  const c = document.getElementById("bg-canvas");
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  let W, H, particles = [], mouse = { x: -999, y: -999 };
+  const COUNT = 60, CONNECT_DIST = 140, MOUSE_DIST = 180;
+
+  function resize() {
+    W = c.width = window.innerWidth;
+    H = c.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  for (let i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      r: Math.random() * 1.5 + 0.5,
+    });
+  }
+
+  document.addEventListener("mousemove", (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  });
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
+
+      // Mouse repulsion
+      const dx = p.x - mouse.x, dy = p.y - mouse.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < MOUSE_DIST) {
+        const force = (MOUSE_DIST - dist) / MOUSE_DIST * 0.015;
+        p.vx += dx * force;
+        p.vy += dy * force;
+      }
+      // Dampen
+      p.vx *= 0.999;
+      p.vy *= 0.999;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(167,139,250,0.35)";
+      ctx.fill();
+
+      // Connections
+      for (let j = i + 1; j < particles.length; j++) {
+        const q = particles[j];
+        const dx2 = p.x - q.x, dy2 = p.y - q.y;
+        const d = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        if (d < CONNECT_DIST) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(q.x, q.y);
+          const alpha = (1 - d / CONNECT_DIST) * 0.12;
+          ctx.strokeStyle = `rgba(167,139,250,${alpha})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ────────────── Toast ──────────────
+const toastInner = document.getElementById("toast-inner");
 let toastTimer = null;
-function toast(msg, kind = "info") {
-  toastEl.textContent = msg;
-  toastEl.classList.add("show");
-  toastEl.dataset.kind = kind;
+function toast(msg) {
+  toastInner.textContent = msg;
+  toastInner.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2400);
+  toastTimer = setTimeout(() => toastInner.classList.remove("show"), 2600);
 }
 
-// ------------------------- Navigation -------------------------
+// ────────────── Navigation ──────────────
 function go(view) {
-  document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-  const btn = document.querySelector(`.nav-btn[data-view="${view}"]`);
+  const btn = document.querySelector(`.nav-item[data-view="${view}"]`);
   if (btn) btn.classList.add("active");
   const sec = document.getElementById("view-" + view);
   if (sec) sec.classList.add("active");
 }
-document.querySelectorAll(".nav-btn").forEach((btn) => {
-  btn.addEventListener("click", () => go(btn.dataset.view));
-});
-document.querySelectorAll("[data-go]").forEach((el) => {
-  el.addEventListener("click", () => go(el.dataset.go));
-});
+document.querySelectorAll(".nav-item").forEach((b) =>
+  b.addEventListener("click", () => go(b.dataset.view))
+);
+document.querySelectorAll("[data-go]").forEach((el) =>
+  el.addEventListener("click", () => go(el.dataset.go))
+);
+document.getElementById("btn-go-scan").addEventListener("click", () => go("scan"));
+document.getElementById("btn-home-scan").addEventListener("click", () => go("scan"));
 
-// ------------------------- Dashboard -------------------------
-
-async function refreshStats() {
-  if (!invoke) {
-    document.getElementById("stat-sigs").textContent = "—";
-    return;
+// ────────────── Animated counter ──────────────
+function animateCounter(el, to, duration = 600) {
+  const from = parseInt(el.textContent) || 0;
+  if (from === to) { el.textContent = to; return; }
+  const start = performance.now();
+  function tick(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    el.textContent = Math.round(from + (to - from) * ease);
+    if (t < 1) requestAnimationFrame(tick);
   }
-  try {
-    const stats = await invoke("get_stats");
-    document.getElementById("stat-sigs").textContent = stats.signatures;
-    document.getElementById("stat-wl").textContent = stats.whitelist;
-    document.getElementById("stat-games").textContent = stats.games;
-    document.getElementById("stat-qf").textContent = stats.quarantine_files;
+  requestAnimationFrame(tick);
+}
 
-    // Derive a simple protection score.
-    const q = stats.quarantine_files || 0;
-    const base = 92;
-    const score = Math.max(0, base - q * 6);
-    setScore(score, stats);
+// ────────────── Dashboard ──────────────
+async function refreshStats() {
+  if (!invoke) return;
+  try {
+    const s = await invoke("get_stats");
+    animateCounter(document.getElementById("stat-sigs"), s.signatures);
+    animateCounter(document.getElementById("stat-wl"), s.whitelist);
+    animateCounter(document.getElementById("stat-games"), s.games);
+    animateCounter(document.getElementById("stat-qf"), s.quarantine_files);
+
+    const q = s.quarantine_files || 0;
+    const score = Math.max(0, Math.min(100, 92 - q * 8));
+    setScore(score, s);
   } catch (e) {
-    console.error("get_stats failed", e);
+    console.error("get_stats", e);
   }
 }
 
 function setScore(score, stats) {
-  const ring = document.getElementById("score-ring");
-  const label = document.getElementById("score-value");
+  const ring = document.getElementById("ring-progress");
+  const ringTop = document.getElementById("ring-progress-top");
+  const label = document.getElementById("ring-score");
   const title = document.getElementById("hero-title");
-  const sub = document.getElementById("hero-sub");
-  const pill = document.getElementById("sidebar-status");
+  const sub = document.getElementById("hero-subtitle");
+  const pill = document.getElementById("status-indicator");
 
-  const circumference = 2 * Math.PI * 54;
-  const offset = circumference * (1 - score / 100);
+  const circ = 2 * Math.PI * 88;
+  const offset = circ * (1 - score / 100);
   ring.style.strokeDashoffset = offset;
-  label.textContent = String(score);
+  ringTop.style.strokeDashoffset = offset;
 
-  pill.classList.remove("warn", "bad");
-  if (score >= 85) {
+  animateCounter(label, score, 900);
+
+  pill.classList.remove("warn");
+  if (score >= 80) {
     title.textContent = "Systems nominal";
-    sub.textContent = `No active threats detected. ${stats?.signatures ?? 0} signatures loaded.`;
-    pill.querySelector(".text").textContent = "Protected";
-  } else if (score >= 60) {
-    title.textContent = "Attention needed";
-    sub.textContent = `${stats?.quarantine_files ?? 0} file(s) in quarantine. Review and decide.`;
+    sub.textContent = `No active threats. ${stats?.signatures ?? 0} signatures loaded.`;
+    pill.querySelector(".status-text").textContent = "Protected";
+  } else if (score >= 50) {
+    title.textContent = "Review needed";
+    sub.textContent = `${stats?.quarantine_files ?? 0} files quarantined. Consider reviewing.`;
     pill.classList.add("warn");
-    pill.querySelector(".text").textContent = "Review";
+    pill.querySelector(".status-text").textContent = "Review";
   } else {
     title.textContent = "Action required";
-    sub.textContent = "Multiple threats isolated. Run a deep scan.";
-    pill.classList.add("bad");
-    pill.querySelector(".text").textContent = "At risk";
+    sub.textContent = "Multiple threats detected. Run a deep scan.";
+    pill.classList.add("warn");
+    pill.querySelector(".status-text").textContent = "At risk";
   }
 }
 
-document.getElementById("refresh-stats").addEventListener("click", refreshStats);
-document.getElementById("btn-open-scan").addEventListener("click", () => go("scan"));
-document.getElementById("btn-quickscan-home").addEventListener("click", async () => {
-  const home = window.__TAURI__?.path ? "" : "";
-  toast("Quick scan — enter a folder in the Scan view");
-  go("scan");
+document.getElementById("refresh-stats").addEventListener("click", () => {
+  refreshStats();
+  toast("Stats refreshed");
 });
 
-// ------------------------- Scan -------------------------
-
-function renderVerdict(result, target) {
-  const v = document.getElementById(target);
-  if (!result) { v.classList.add("hidden"); return; }
-  v.classList.remove("hidden", "clean", "warn", "bad");
+// ────────────── Scan ──────────────
+function showVerdict(result, targetId) {
+  const el = document.getElementById(targetId);
+  if (!result) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden", "clean", "warn", "bad");
   const level = result.threat_info?.threat_level ?? "Clean";
-  let kind = "clean";
-  if (level === "Clean") kind = "clean";
-  else if (level === "Suspicious" || level === "CheatDetected") kind = "warn";
-  else kind = "bad";
-  v.classList.add(kind);
-  const name = result.file_name ?? "file";
-  const score = result.threat_info?.confidence_score ?? 0;
-  v.innerHTML = `
-    <span class="badge">${level}</span>
+  const kind = level === "Clean" ? "clean"
+    : (level === "Suspicious" || level === "CheatDetected") ? "warn" : "bad";
+  el.classList.add(kind);
+  el.innerHTML = `
+    <span class="verdict-badge">${esc(level)}</span>
     <div>
-      <div style="font-weight:600">${escapeHtml(name)}</div>
-      <div style="color:var(--muted); font-size:12px">Confidence ${score}% · ${escapeHtml(result.threat_info?.description ?? "")}</div>
-    </div>
-  `;
+      <div style="font-weight:700">${esc(result.file_name ?? "file")}</div>
+      <div style="color:var(--text-3);font-size:12px;margin-top:2px">
+        Confidence ${result.threat_info?.confidence_score ?? 0}%
+        · ${esc(result.threat_info?.description ?? "")}
+      </div>
+    </div>`;
 }
 
-async function runScan(cmd) {
+async function doScan(cmd) {
   const path = document.getElementById("scan-path").value.trim();
-  const out = document.getElementById("scan-result");
-  if (!path) { toast("Please enter a file path"); return; }
+  const out = document.getElementById("scan-output");
+  if (!path) { toast("Enter a file path first"); return; }
   if (!invoke) { out.textContent = "Tauri runtime not available."; return; }
-  out.textContent = "Scanning...";
-  renderVerdict(null, "scan-verdict");
+  out.textContent = "Scanning…";
+  showVerdict(null, "scan-verdict");
   try {
-    const result = await invoke(cmd, { path });
-    out.textContent = JSON.stringify(result, null, 2);
-    renderVerdict(result, "scan-verdict");
+    const r = await invoke(cmd, { path });
+    out.textContent = JSON.stringify(r, null, 2);
+    showVerdict(r, "scan-verdict");
+    toast("Scan complete");
   } catch (e) {
     out.textContent = "Error: " + e;
     toast("Scan failed");
   }
 }
-document.getElementById("btn-scan").addEventListener("click", () => runScan("scan_file"));
-document.getElementById("btn-qscan").addEventListener("click", () => runScan("quick_scan"));
+document.getElementById("btn-deep-scan").addEventListener("click", () => doScan("scan_file"));
+document.getElementById("btn-quick-scan").addEventListener("click", () => doScan("quick_scan"));
 
-// Drag & drop — Tauri v2 emits custom file-drop events via window.
-const drop = document.getElementById("drop-card");
-["dragenter", "dragover"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => {
-    e.preventDefault();
-    drop.classList.add("hover");
-  })
-);
-["dragleave", "drop"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => {
-    e.preventDefault();
-    drop.classList.remove("hover");
-  })
-);
-drop.addEventListener("drop", (e) => {
+// Drop zone
+const dz = document.getElementById("drop-zone");
+["dragenter", "dragover"].forEach((e) => dz.addEventListener(e, (ev) => { ev.preventDefault(); dz.classList.add("hovering"); }));
+["dragleave", "drop"].forEach((e) => dz.addEventListener(e, (ev) => { ev.preventDefault(); dz.classList.remove("hovering"); }));
+dz.addEventListener("drop", (e) => {
   if (e.dataTransfer?.files?.length) {
-    const f = e.dataTransfer.files[0];
-    document.getElementById("scan-path").value = f.path || f.name || "";
-    toast("File attached");
+    document.getElementById("scan-path").value = e.dataTransfer.files[0].path || e.dataTransfer.files[0].name || "";
+    toast("File attached — click scan");
   }
 });
 
-// ------------------------- Tune -------------------------
-
+// ────────────── Tune ──────────────
 async function runTune(apply) {
-  if (!invoke) { toast("Tauri runtime not available"); return; }
+  if (!invoke) { toast("Tauri not available"); return; }
   const list = document.getElementById("tune-list");
-  list.innerHTML = `<div class="empty">Working…</div>`;
+  list.innerHTML = `<div class="empty-state glass"><div class="empty-icon">⏳</div><div class="empty-title">Working…</div></div>`;
   try {
-    const cmd = apply ? "tune_apply" : "tune_plan";
-    const report = await invoke(cmd);
+    const report = await invoke(apply ? "tune_apply" : "tune_plan");
     renderTune(report);
-    toast(apply ? "Safe tweaks applied" : "Tune plan generated");
+    toast(apply ? "Safe tweaks applied" : "Tune plan ready");
   } catch (e) {
-    list.innerHTML = `<div class="empty">Error: ${escapeHtml(String(e))}</div>`;
-    toast("Tune failed");
+    list.innerHTML = `<div class="empty-state glass"><div class="empty-title">Error: ${esc(String(e))}</div></div>`;
   }
 }
 
-function renderTune(report) {
-  document.getElementById("tune-before").textContent = report.score_before;
-  document.getElementById("tune-after").textContent = report.score_after;
-  document.getElementById("tune-fill").style.width = report.score_after + "%";
+function renderTune(r) {
+  document.getElementById("tune-score-before").textContent = r.score_before;
+  document.getElementById("tune-score-after").textContent = r.score_after;
+  document.getElementById("tune-bar-fill").style.width = r.score_after + "%";
 
   const list = document.getElementById("tune-list");
-  if (!report.suggestions.length) {
-    list.innerHTML = `<div class="empty">No suggestions — your system is already tuned.</div>`;
+  if (!r.suggestions.length) {
+    list.innerHTML = `<div class="empty-state glass"><div class="empty-icon">🎉</div><div class="empty-title">Nothing to tune</div><div class="empty-hint">Your system is already optimized</div></div>`;
     return;
   }
-  list.innerHTML = report.suggestions
-    .map((s) => {
-      const impact = (s.impact || "Low").toLowerCase();
-      const tag = impact === "high" ? "high" : impact === "medium" ? "med" : "low";
-      const applied = s.applied ? "applied" : "";
-      return `
-      <div class="suggestion">
-        <span class="tag ${tag}">${impact}</span>
-        <div>
-          <div class="title">${escapeHtml(s.title)}</div>
-          <div class="desc">${escapeHtml(s.description)}</div>
-          <div class="cat">${escapeHtml(formatCategory(s.category))} · revert: ${escapeHtml(s.revert_hint)}</div>
-        </div>
-        <div class="check ${applied}">${s.applied ? "✓ Done" : "Pending"}</div>
-      </div>`;
-    })
-    .join("");
-}
-
-function formatCategory(c) {
-  if (!c) return "";
-  return String(c).replace(/([A-Z])/g, " $1").trim();
+  list.innerHTML = r.suggestions.map((s) => {
+    const imp = (s.impact || "Low").toLowerCase();
+    const tag = imp === "high" ? "high" : imp === "medium" ? "med" : "low";
+    return `
+    <div class="suggestion-card">
+      <span class="impact-tag ${tag}">${imp}</span>
+      <div>
+        <div class="sug-title">${esc(s.title)}</div>
+        <div class="sug-desc">${esc(s.description)}</div>
+        <div class="sug-meta">${esc(fmtCat(s.category))} · revert: ${esc(s.revert_hint)}</div>
+      </div>
+      <div class="sug-status ${s.applied ? "done" : ""}">${s.applied ? "✓ Applied" : "Pending"}</div>
+    </div>`;
+  }).join("");
 }
 
 document.getElementById("btn-tune-plan").addEventListener("click", () => runTune(false));
 document.getElementById("btn-tune-apply").addEventListener("click", () => runTune(true));
 
-// ------------------------- Deep Clean -------------------------
-
-let lastCleanReport = null;
+// ────────────── Deep Clean ──────────────
+let cleanReport = null;
 
 async function runCleanScan() {
-  if (!invoke) { toast("Tauri runtime not available"); return; }
+  if (!invoke) { toast("Tauri not available"); return; }
   const list = document.getElementById("clean-list");
-  list.innerHTML = `<div class="empty">Scanning…</div>`;
+  list.innerHTML = `<div class="empty-state glass"><div class="empty-icon">⏳</div><div class="empty-title">Scanning…</div></div>`;
   try {
-    const report = await invoke("clean_scan");
-    lastCleanReport = report;
-    renderClean(report);
-    toast(`Found ${formatBytes(report.total_bytes)}`);
+    const r = await invoke("clean_scan");
+    cleanReport = r;
+    renderClean(r);
+    toast(`Found ${fmtBytes(r.total_bytes)} reclaimable`);
   } catch (e) {
-    list.innerHTML = `<div class="empty">Error: ${escapeHtml(String(e))}</div>`;
-    toast("Scan failed");
+    list.innerHTML = `<div class="empty-state glass"><div class="empty-title">Error: ${esc(String(e))}</div></div>`;
   }
 }
 
 async function runCleanSweep() {
-  if (!invoke) { toast("Tauri runtime not available"); return; }
-  if (!lastCleanReport) { toast("Run a scan first"); return; }
-  if (!confirm("Delete the selected reclaimable files? This cannot be undone.")) return;
+  if (!invoke || !cleanReport) { toast("Run a scan first"); return; }
+  if (!confirm("Delete selected reclaimable files? This can't be undone.")) return;
   try {
-    const result = await invoke("clean_sweep", { report: lastCleanReport });
-    toast(`Freed ${formatBytes(result.bytes_freed)} (${result.files_deleted} files)`);
-    runCleanScan();
-  } catch (e) {
-    toast("Sweep failed: " + e);
-  }
+    const r = await invoke("clean_sweep", { report: cleanReport });
+    toast(`Freed ${fmtBytes(r.bytes_freed)} (${r.files_deleted} files)`);
+    runCleanScan(); // refresh
+  } catch (e) { toast("Sweep error: " + e); }
 }
 
-function renderClean(report) {
-  document.getElementById("clean-bytes").textContent = formatBytes(report.total_bytes);
-  const breakdown = document.getElementById("clean-breakdown");
+function renderClean(r) {
+  document.getElementById("clean-amount").textContent = fmtBytes(r.total_bytes);
   const byCat = {};
-  for (const t of report.targets) {
-    byCat[t.category] = (byCat[t.category] || 0) + t.size_bytes;
-  }
-  breakdown.innerHTML = Object.entries(byCat)
+  for (const t of r.targets) byCat[t.category] = (byCat[t.category] || 0) + t.size_bytes;
+  document.getElementById("clean-chips").innerHTML = Object.entries(byCat)
     .sort((a, b) => b[1] - a[1])
-    .map(([c, b]) => `<div class="chip">${escapeHtml(formatCategory(c))}<span class="dim">${formatBytes(b)}</span></div>`)
-    .join("") || `<div style="color:var(--muted); font-size:12px">Nothing to show.</div>`;
-
-  const list = document.getElementById("clean-list");
-  if (!report.targets.length) {
-    list.innerHTML = `<div class="empty">Nothing to reclaim. System is tidy.</div>`;
-    return;
-  }
-  list.innerHTML = report.targets
-    .map(
-      (t, i) => `
-    <div class="target ${t.selected ? "selected" : ""}" data-idx="${i}">
-      <div class="check-box">✓</div>
-      <div>
-        <div class="title">${escapeHtml(t.description)}</div>
-        <div class="path">${escapeHtml(t.path)} · ${t.file_count} files</div>
-        <div class="cat">${escapeHtml(formatCategory(t.category))}</div>
-      </div>
-      <div class="size">${formatBytes(t.size_bytes)}</div>
-    </div>`
-    )
+    .map(([c, b]) => `<div class="chip">${esc(fmtCat(c))}<span class="dim">${fmtBytes(b)}</span></div>`)
     .join("");
 
-  list.querySelectorAll(".target").forEach((el) => {
+  const list = document.getElementById("clean-list");
+  if (!r.targets.length) {
+    list.innerHTML = `<div class="empty-state glass"><div class="empty-icon">🎉</div><div class="empty-title">Squeaky clean</div><div class="empty-hint">Nothing to reclaim</div></div>`;
+    return;
+  }
+  list.innerHTML = r.targets.map((t, i) => `
+    <div class="target-card ${t.selected ? "selected" : ""}" data-idx="${i}">
+      <div class="check-box">✓</div>
+      <div>
+        <div class="target-title">${esc(t.description)}</div>
+        <div class="target-path">${esc(t.path)} · ${t.file_count} files</div>
+        <div class="target-cat">${esc(fmtCat(t.category))}</div>
+      </div>
+      <div class="target-size">${fmtBytes(t.size_bytes)}</div>
+    </div>`).join("");
+
+  list.querySelectorAll(".target-card").forEach((el) => {
     el.addEventListener("click", () => {
-      const idx = parseInt(el.dataset.idx, 10);
-      lastCleanReport.targets[idx].selected = !lastCleanReport.targets[idx].selected;
+      const i = +el.dataset.idx;
+      cleanReport.targets[i].selected = !cleanReport.targets[i].selected;
       el.classList.toggle("selected");
     });
   });
@@ -285,124 +338,116 @@ function renderClean(report) {
 document.getElementById("btn-clean-scan").addEventListener("click", runCleanScan);
 document.getElementById("btn-clean-sweep").addEventListener("click", runCleanSweep);
 
-// ------------------------- Script Shield -------------------------
-
-document.getElementById("btn-script").addEventListener("click", async () => {
+// ────────────── Script Shield ──────────────
+document.getElementById("btn-script-analyze").addEventListener("click", async () => {
   const path = document.getElementById("script-path").value.trim();
-  const out = document.getElementById("script-result");
+  const out = document.getElementById("script-output");
   if (!path) { toast("Enter a script path"); return; }
-  if (!invoke) { out.textContent = "Tauri runtime not available."; return; }
-  out.textContent = "Analyzing...";
+  if (!invoke) { out.textContent = "Tauri not available."; return; }
+  out.textContent = "Analyzing…";
   try {
-    const report = await invoke("analyze_script", { path });
-    out.textContent = JSON.stringify(report, null, 2);
-    const verdict = document.getElementById("script-verdict");
-    verdict.classList.remove("hidden", "clean", "warn", "bad");
-    const risk = report.risk_score ?? 0;
-    const kind = risk >= 70 ? "bad" : risk >= 40 ? "warn" : "clean";
-    verdict.classList.add(kind);
-    verdict.innerHTML = `
-      <span class="badge">${escapeHtml(report.label ?? "Analyzed")}</span>
+    const r = await invoke("analyze_script", { path });
+    out.textContent = JSON.stringify(r, null, 2);
+    const v = document.getElementById("script-verdict");
+    v.classList.remove("hidden", "clean", "warn", "bad");
+    const risk = r.risk_score ?? 0;
+    v.classList.add(risk >= 70 ? "bad" : risk >= 40 ? "warn" : "clean");
+    v.innerHTML = `
+      <span class="verdict-badge">${esc(r.label ?? "Analyzed")}</span>
       <div>
-        <div style="font-weight:600">${escapeHtml(report.language ?? "script")} · risk ${risk}/100</div>
-        <div style="color:var(--muted); font-size:12px">${report.url_count ?? 0} URLs · ${report.api_call_count ?? 0} API calls · obfuscated: ${!!report.obfuscation_detected}</div>
-      </div>
-    `;
+        <div style="font-weight:700">${esc(r.language ?? "script")} · risk ${risk}/100</div>
+        <div style="color:var(--text-3);font-size:12px;margin-top:2px">
+          ${r.url_count ?? 0} URLs · ${r.api_call_count ?? 0} API calls · obfuscated: ${!!r.obfuscation_detected}
+        </div>
+      </div>`;
+    toast("Analysis complete");
   } catch (e) {
     out.textContent = "Error: " + e;
   }
 });
 
-// ------------------------- AC Compat -------------------------
-
+// ────────────── AC Compat ──────────────
 async function refreshCompat(full = false) {
   if (!invoke) return;
   try {
-    const status = await invoke("compat_status");
-    const summary = document.getElementById("compat-summary");
-    const pill = document.getElementById("sidebar-status");
-    if (!status.active_products.length) {
-      summary.innerHTML = `<div><b>No game anti-cheat running.</b><br><span style="color:var(--muted)">Full protection is active. You're all clear.</span></div>`;
+    const s = await invoke("compat_status");
+    const dash = document.getElementById("compat-dash");
+    if (!s.active_products.length) {
+      dash.innerHTML = `<div style="display:flex;align-items:center;gap:10px">
+        <span style="color:var(--emerald);font-size:18px">✓</span>
+        <div><b>No game anti-cheat running</b><br><span style="color:var(--text-3);font-size:12px">Full protection active</span></div>
+      </div>`;
     } else {
-      const list = status.active_products.map((p) => humanizeProduct(p)).join(", ");
-      const safe = status.safe_mode ? "Safe mode enabled" : "Normal";
-      summary.innerHTML = `
-        <div><b>${escapeHtml(list)}</b> — ${escapeHtml(safe)}</div>
-        <div style="color:var(--muted); margin-top:6px; font-size:12px">${escapeHtml(status.explanation)}</div>
-      `;
-      if (status.kernel_mode_active) {
-        pill.classList.add("warn");
-        pill.querySelector(".text").textContent = "AC safe mode";
-      }
+      const names = s.active_products.map(humanAC).join(", ");
+      dash.innerHTML = `<div>
+        <b style="color:var(--amber)">${esc(names)}</b>
+        <div style="color:var(--text-3);font-size:12px;margin-top:4px">${esc(s.explanation)}</div>
+      </div>`;
     }
 
     if (full) {
       const box = document.getElementById("compat-full");
-      if (!status.active_products.length) {
-        box.innerHTML = `<div class="panel-body"><b style="color:var(--green)">✓ No game anti-cheat detected.</b><br><span style="color:var(--muted)">AntiCheat is running at full capability.</span></div>`;
+      if (!s.active_products.length) {
+        box.innerHTML = `<div class="panel-content" style="padding:32px;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px;opacity:.6">🛡</div>
+          <div style="font-weight:700;color:var(--emerald)">No game anti-cheat detected</div>
+          <div style="color:var(--text-3);margin-top:4px">AntiCheat is running at full capability.</div>
+        </div>`;
       } else {
-        const rows = status.active_products
-          .map((p) => `<div style="display:flex; align-items:center; gap:8px; margin:4px 0"><span style="width:8px; height:8px; border-radius:99px; background: ${isKernel(p) ? "var(--red)" : "var(--yellow)"}"></span><b>${escapeHtml(humanizeProduct(p))}</b> <span style="color:var(--muted); font-size:12px">${isKernel(p) ? "kernel-mode" : "user-mode"}</span></div>`)
-          .join("");
-        box.innerHTML = `
-          <div class="panel-body">
-            ${rows}
-            <hr style="border:none; border-top:1px solid var(--border); margin:14px 0">
-            <div><b>Safe mode:</b> ${status.safe_mode ? "enabled" : "off"}</div>
-            <div style="color:var(--muted); margin-top:6px">${escapeHtml(status.explanation)}</div>
-            <div style="color:var(--muted); margin-top:14px; font-size:12px">
-              When safe mode is on, AntiCheat does not open process handles to games,
-              does not load drivers, and only scans guarded game directories on demand.
-              This is what keeps EAC, BattlEye, and Vanguard from treating us like a cheat.
-            </div>
+        const rows = s.active_products.map(p => {
+          const k = isKernel(p);
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+            <span style="width:10px;height:10px;border-radius:50%;background:${k ? "var(--red)" : "var(--amber)"};box-shadow:0 0 8px ${k ? "var(--red)" : "var(--amber)"}"></span>
+            <b>${esc(humanAC(p))}</b>
+            <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:${k ? "var(--red-dim)" : "var(--amber-dim)"};color:${k ? "var(--red)" : "var(--amber)"}">${k ? "kernel" : "user"}</span>
           </div>`;
+        }).join("");
+        box.innerHTML = `<div class="panel-content">
+          ${rows}<hr>
+          <div><b>Safe mode:</b> ${s.safe_mode ? '<span style="color:var(--emerald)">ON</span>' : "OFF"}</div>
+          <div style="color:var(--text-3);margin-top:8px">${esc(s.explanation)}</div>
+          <div style="color:var(--text-3);margin-top:16px;font-size:12px;padding:14px;background:var(--surface-2);border-radius:var(--r-xs)">
+            When safe mode is active, AntiCheat never opens process handles to games,
+            never loads drivers, and only scans guarded game directories on explicit demand.
+            This is how we stay invisible to EAC, BattlEye, Vanguard, and other kernel anti-cheats.
+          </div>
+        </div>`;
       }
     }
   } catch (e) {
-    console.error("compat_status failed", e);
+    console.error("compat", e);
   }
 }
 
-function humanizeProduct(p) {
-  const map = {
-    EasyAntiCheat: "Easy Anti-Cheat",
-    BattlEye: "BattlEye",
-    RiotVanguard: "Riot Vanguard",
-    FaceitAc: "FACEIT AC",
-    EsportsAc: "ESEA",
-    PunkBuster: "PunkBuster",
-    XignCode3: "XIGNCODE3",
-    MiHoYoAc: "miHoYo AC",
-    Ricochet: "Ricochet",
-    Denuvo: "Denuvo",
-    Steam: "VAC",
-  };
-  return map[p] ?? p;
-}
-function isKernel(p) {
-  return ["RiotVanguard", "Ricochet", "MiHoYoAc", "XignCode3", "FaceitAc"].includes(p);
-}
-
-document.getElementById("refresh-compat").addEventListener("click", () => refreshCompat(false));
+document.getElementById("dash-compat-refresh").addEventListener("click", () => refreshCompat(false));
 document.getElementById("btn-compat-refresh").addEventListener("click", () => refreshCompat(true));
 
-// ------------------------- Helpers -------------------------
-
-function formatBytes(bytes) {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  let v = bytes;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v.toFixed(v < 10 ? 2 : 1)} ${units[i]}`;
+// ────────────── Helpers ──────────────
+function fmtBytes(b) {
+  if (!b) return "0 B";
+  const u = ["B","KB","MB","GB","TB"];
+  let i = 0, v = b;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v < 10 ? v.toFixed(2) : v.toFixed(1)} ${u[i]}`;
 }
-
-function escapeHtml(s) {
+function fmtCat(c) {
+  if (!c) return "";
+  return String(c).replace(/([A-Z])/g, " $1").trim();
+}
+function esc(s) {
   if (s == null) return "";
-  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+function humanAC(p) {
+  return {EasyAntiCheat:"Easy Anti-Cheat",BattlEye:"BattlEye",RiotVanguard:"Riot Vanguard",
+    FaceitAc:"FACEIT AC",EsportsAc:"ESEA",PunkBuster:"PunkBuster",XignCode3:"XIGNCODE3",
+    MiHoYoAc:"miHoYo AC",Ricochet:"Ricochet",Denuvo:"Denuvo",Steam:"VAC"}[p] ?? p;
+}
+function isKernel(p) {
+  return ["RiotVanguard","Ricochet","MiHoYoAc","XignCode3","FaceitAc"].includes(p);
 }
 
-// ------------------------- Initial load -------------------------
+// ────────────── Boot ──────────────
 refreshStats();
 refreshCompat(false);
 refreshCompat(true);
